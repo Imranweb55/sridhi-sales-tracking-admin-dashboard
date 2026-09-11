@@ -32,6 +32,9 @@ import CustomerDetailPage  from "./pages/CustomerDetailPage";
 import SalesReportsPage    from "./pages/SalesReportsPage";
 import DailyInvoicesPage   from "./pages/DailyInvoicesPage";
 
+// ── NEW PAGE (additive) — Feature 6: WhatsApp Automation ──
+import WhatsappAutomationPage from "./pages/WhatsappAutomationPage";
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -65,6 +68,9 @@ export default function App() {
           <Route path="/customers/:id" element={<AdminPrivateRoute><CustomerDetailPage /></AdminPrivateRoute>} />
           <Route path="/sales-reports" element={<AdminPrivateRoute><SalesReportsPage /></AdminPrivateRoute>} />
           <Route path="/daily-invoices" element={<AdminPrivateRoute><DailyInvoicesPage /></AdminPrivateRoute>} />
+
+          {/* NEW route (additive) — Feature 6: WhatsApp Automation */}
+          <Route path="/whatsapp-automation" element={<AdminPrivateRoute><WhatsappAutomationPage /></AdminPrivateRoute>} />
 
           {/* 404 */}
           <Route path="*" element={<Navigate to="/login" replace />} />
