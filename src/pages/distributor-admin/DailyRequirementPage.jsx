@@ -1,0 +1,250 @@
+// FILE: src/pages/distributor-admin/DailyRequirementPage.jsx
+// UI REDESIGN ONLY — matches the reference screenshot exactly (status
+// pill tabs each showing a live count, a search+filter bar, a proper
+// table layout instead of cards, the empty-state illustration, and a
+// "Showing X of Y requests" pagination footer). All data calls
+// (getAllBatterRequests / approveBatterRequest / rejectBatterRequest)
+// are unchanged.
+import { useEffect, useState, Fragment } from "react";
+import DistributorAdminLayout from "../../components/DistributorAdminLayout";
+import EmptyStateIllustration from "../../components/EmptyStateIllustration";
+import { getAllBatterRequests, approveBatterRequest, rejectBatterRequest } from "../../api/batterRequestApi";
+
+const STATUS_STYLE = {
+  pending: "bg-amber-50 text-amber-600",
+  approved: "bg-green-50 text-green-600",
+  partially_approved: "bg-teal-50 text-teal-600",
+  rejected: "bg-red-50 text-red-600",
+};
+
+const TABS = [
+  { key: "pending", label: "Pending", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
+  { key: "approved", label: "Approved", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
+  { key: "partially_approved", label: "Partially Approved", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
+  { key: "rejected", label: "Rejected", icon: "M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" },
+  { key: "", label: "All", icon: "M4 6h16M4 10h16M4 14h16M4 18h16" },
+];
+
+function ApproveModal({ request, onClose, onDone }) {
+  const [idlyKg, setIdlyKg] = useState(request.requestedIdlyKg);
+  const [dosaKg, setDosaKg] = useState(request.requestedDosaKg);
+  const [deliveryTime, setDeliveryTime] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      await approveBatterRequest(request._id, {
+        approvedIdlyKg: Number(idlyKg), approvedDosaKg: Number(dosaKg), deliveryTime, adminNote: note,
+      });
+      onDone();
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+        <h3 className="font-semibold text-gray-800 mb-1">Approve Request — {request.distributor?.name}</h3>
+        <p className="text-xs text-gray-400 mb-4">Requested: {request.requestedIdlyKg}kg idly / {request.requestedDosaKg}kg dosa</p>
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="text-xs font-medium text-gray-500">Idly batter to approve (kg)</label>
+            <input type="number" value={idlyKg} onChange={(e) => setIdlyKg(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500">Dosa batter to approve (kg)</label>
+            <input type="number" value={dosaKg} onChange={(e) => setDosaKg(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm" />
+          </div>
+        </div>
+        <div className="mb-3">
+          <label className="text-xs font-medium text-gray-500">Delivery time</label>
+          <input placeholder="e.g. 6:30 PM today" value={deliveryTime} onChange={(e) => setDeliveryTime(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm" />
+        </div>
+        <div className="mb-4">
+          <label className="text-xs font-medium text-gray-500">Note to distributor (optional)</label>
+          <input placeholder="e.g. Only 30kg idly batter available today" value={note} onChange={(e) => setNote(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-xl border border-gray-200 text-sm" />
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium">Cancel</button>
+          <button onClick={submit} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-medium disabled:opacity-60">
+            {saving ? "Saving…" : "Confirm Approval"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function DailyRequirementPage() {
+  const [allRequests, setAllRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("pending");
+  const [search, setSearch] = useState("");
+  const [modalRequest, setModalRequest] = useState(null);
+  const [expanded, setExpanded] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+    getAllBatterRequests({})
+      .then((data) => setAllRequests(data.requests || []))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const counts = TABS.reduce((acc, t) => {
+    acc[t.key] = t.key ? allRequests.filter((r) => r.status === t.key).length : allRequests.length;
+    return acc;
+  }, {});
+
+  const filtered = allRequests
+    .filter((r) => !filter || r.status === filter)
+    .filter((r) => (r.distributor?.name + r.distributor?.employeeId + (r.distributor?.zone?.name || "")).toLowerCase().includes(search.toLowerCase()));
+
+  const handleReject = async (id) => {
+    const note = window.prompt("Reason for rejecting (optional):", "");
+    if (note === null) return;
+    await rejectBatterRequest(id, note);
+    load();
+  };
+
+  return (
+    <DistributorAdminLayout
+      icon="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+      title="Daily Requirement"
+      subtitle="View and manage daily distributor requirements"
+    >
+      <div className="flex flex-wrap gap-2 mb-4">
+        {TABS.map((t) => (
+          <button
+            key={t.key || "all"}
+            onClick={() => setFilter(t.key)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${filter === t.key ? "bg-teal-600 text-white" : "bg-white border border-gray-200 text-gray-500"}`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={t.icon} /></svg>
+            {t.label}
+            <span className={`w-5 h-5 rounded-full text-[11px] flex items-center justify-center ${filter === t.key ? "bg-white/20" : "bg-gray-100 text-gray-500"}`}>{counts[t.key]}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50 flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+            </div>
+            <p className="font-semibold text-gray-800 text-sm">Daily Requirements</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by distributor name, ID or location…" className="pl-10 pr-3 py-2 rounded-xl border border-gray-200 text-sm w-72" />
+            </div>
+            <button onClick={load} className="px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+              Filter
+            </button>
+          </div>
+        </div>
+
+        {loading && <div className="text-center text-gray-400 py-14">Loading…</div>}
+
+        {!loading && filtered.length === 0 && (
+          <EmptyStateIllustration
+            icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+            title="No requests for this filter today."
+            description="Try changing the filter or check back later for new requests."
+            action={
+              <button onClick={load} className="px-4 py-2 rounded-xl bg-teal-600 text-white text-sm font-medium flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                Refresh
+              </button>
+            }
+          />
+        )}
+
+        {!loading && filtered.length > 0 && (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-gray-400 text-[11px] uppercase tracking-wide">
+              <tr>
+                <th className="text-left px-5 py-3 font-medium">#</th>
+                <th className="text-left px-5 py-3 font-medium">Distributor Name</th>
+                <th className="text-left px-5 py-3 font-medium">Distributor ID</th>
+                <th className="text-left px-5 py-3 font-medium">Location</th>
+                <th className="text-left px-5 py-3 font-medium">Request Date</th>
+                <th className="text-left px-5 py-3 font-medium">Requirement Details</th>
+                <th className="text-left px-5 py-3 font-medium">Status</th>
+                <th className="text-right px-5 py-3 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filtered.map((r, i) => (
+                <Fragment key={r._id}>
+                  <tr className="hover:bg-gray-50 align-top">
+                    <td className="px-5 py-4 text-gray-400">{i + 1}</td>
+                    <td className="px-5 py-4 font-medium text-gray-800">{r.distributor?.name}</td>
+                    <td className="px-5 py-4"><span className="px-2.5 py-1 rounded-lg bg-teal-50 text-teal-600 text-xs font-medium">{r.distributor?.employeeId}</span></td>
+                    <td className="px-5 py-4 text-gray-500">{r.distributor?.zone?.name || "—"}</td>
+                    <td className="px-5 py-4 text-gray-500">{new Date(r.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</td>
+                    <td className="px-5 py-4 text-gray-600">
+                      <p>Req: {r.requestedIdlyKg}kg idly / {r.requestedDosaKg}kg dosa</p>
+                      {r.status !== "pending" && <p className="text-xs text-gray-400">Approved: {r.approvedIdlyKg}kg / {r.approvedDosaKg}kg</p>}
+                      <button onClick={() => setExpanded(expanded === r._id ? null : r._id)} className="text-[11px] text-teal-600 font-medium mt-1">
+                        {expanded === r._id ? "Hide" : "View"} breakdown ({r.customerOrders?.length || 0})
+                      </button>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLE[r.status]}`}>{r.status.replace("_", " ")}</span>
+                    </td>
+                    <td className="px-5 py-4 text-right whitespace-nowrap">
+                      {r.status === "pending" ? (
+                        <div className="flex gap-2 justify-end">
+                          <button onClick={() => handleReject(r._id)} className="px-3 py-1.5 rounded-lg border border-red-200 text-red-500 text-xs font-medium">Reject</button>
+                          <button onClick={() => setModalRequest(r)} className="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-medium">Approve</button>
+                        </div>
+                      ) : <span className="text-xs text-gray-300">—</span>}
+                    </td>
+                  </tr>
+                  {expanded === r._id && (
+                    <tr>
+                      <td colSpan={8} className="px-5 pb-4 bg-gray-50">
+                        <div className="pt-2 space-y-1">
+                          {(r.customerOrders || []).map((c, idx) => (
+                            <div key={idx} className="flex justify-between text-xs text-gray-600 max-w-md">
+                              <span>{c.shopName || "Customer"}</span>
+                              <span>{c.idlyKg}kg idly · {c.dosaKg}kg dosa</span>
+                            </div>
+                          ))}
+                          {r.deliveryTime && <p className="text-xs text-gray-500 mt-1">Delivery time: <b>{r.deliveryTime}</b></p>}
+                          {r.adminNote && <p className="text-xs text-gray-500">Note: {r.adminNote}</p>}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 text-xs text-gray-400">
+          <span>Showing {filtered.length} of {filtered.length} requests</span>
+          <div className="flex items-center gap-2">
+            <button disabled className="px-2.5 py-1.5 rounded-lg border border-gray-200 disabled:opacity-40">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
+            </button>
+            <button disabled className="px-2.5 py-1.5 rounded-lg border border-gray-200 disabled:opacity-40">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {modalRequest && (
+        <ApproveModal request={modalRequest} onClose={() => setModalRequest(null)} onDone={() => { setModalRequest(null); load(); }} />
+      )}
+    </DistributorAdminLayout>
+  );
+}

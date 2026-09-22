@@ -32,8 +32,17 @@ import CustomerDetailPage  from "./pages/CustomerDetailPage";
 import SalesReportsPage    from "./pages/SalesReportsPage";
 import DailyInvoicesPage   from "./pages/DailyInvoicesPage";
 
-// ── NEW PAGE (additive) — Feature 6: WhatsApp Automation ──
-import WhatsappAutomationPage from "./pages/WhatsappAutomationPage";
+// ── NEW PAGES (additive) — Feature: two Admin Dashboard login types.
+// The old "./pages/distributors/*" pages + their sidebar entry are gone —
+// distributor management now lives in its own dashboard at
+// /distributor-admin/*, entered only via the "Distributors" login tab. ──
+import DistributorAdminRoute        from "./components/DistributorAdminRoute";
+import DistributorAdminDashboardPage from "./pages/distributor-admin/DistributorAdminDashboardPage";
+import AllDistributorsPage    from "./pages/distributor-admin/AllDistributorsPage";
+import AddDistributorPage     from "./pages/distributor-admin/AddDistributorPage";
+import DistributorsMapPage    from "./pages/distributor-admin/DistributorsMapPage";
+import DailyRequirementPage   from "./pages/distributor-admin/DailyRequirementPage";
+import DistributorDetailPage  from "./pages/distributor-admin/DistributorDetailPage";
 
 export default function App() {
   return (
@@ -69,8 +78,16 @@ export default function App() {
           <Route path="/sales-reports" element={<AdminPrivateRoute><SalesReportsPage /></AdminPrivateRoute>} />
           <Route path="/daily-invoices" element={<AdminPrivateRoute><DailyInvoicesPage /></AdminPrivateRoute>} />
 
-          {/* NEW route (additive) — Feature 6: WhatsApp Automation */}
-          <Route path="/whatsapp-automation" element={<AdminPrivateRoute><WhatsappAutomationPage /></AdminPrivateRoute>} />
+          {/* NEW routes (additive) — Feature: two Admin Dashboard login
+              types. Only reachable by an admin whose role is
+              "distributor_admin" (DistributorAdminRoute enforces this);
+              a field-sales admin is bounced back to /dashboard. */}
+          <Route path="/distributor-admin/dashboard"        element={<DistributorAdminRoute><DistributorAdminDashboardPage /></DistributorAdminRoute>} />
+          <Route path="/distributor-admin/all"              element={<DistributorAdminRoute><AllDistributorsPage /></DistributorAdminRoute>} />
+          <Route path="/distributor-admin/add"               element={<DistributorAdminRoute><AddDistributorPage /></DistributorAdminRoute>} />
+          <Route path="/distributor-admin/map"               element={<DistributorAdminRoute><DistributorsMapPage /></DistributorAdminRoute>} />
+          <Route path="/distributor-admin/daily-requirement" element={<DistributorAdminRoute><DailyRequirementPage /></DistributorAdminRoute>} />
+          <Route path="/distributor-admin/:id"               element={<DistributorAdminRoute><DistributorDetailPage /></DistributorAdminRoute>} />
 
           {/* 404 */}
           <Route path="*" element={<Navigate to="/login" replace />} />

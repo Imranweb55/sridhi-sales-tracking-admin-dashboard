@@ -25,6 +25,15 @@ export default function AdminLoginPage() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
   const [showPw, setShowPw]     = useState(false);
+  // NEW (additive) — Feature: two Admin Dashboard login types. This tab
+  // is purely a UI grouping — both tabs submit to the exact same
+  // POST /api/admin/auth/login endpoint below, with no request change at
+  // all. After a successful login, the ACTUAL routing decision is made
+  // from admin.role (which the API already returns), not from this tab —
+  // this tab only sets your *expectation*, so if you pick "Distributors"
+  // but log in with a field-sales account (or vice versa), you're told
+  // so instead of being silently dropped into the wrong dashboard.
+  const [loginType, setLoginType] = useState("field_sales"); // "field_sales" | "distributor_admin"
   const { login }  = useAdminAuth();
   const navigate   = useNavigate();
 
@@ -63,11 +72,26 @@ export default function AdminLoginPage() {
     if (!password.trim()) { setError("Password is required."); return; }
     setLoading(true);
     try {
-      // REAL API CALL — hits POST /api/admin/auth/login on your backend
+      // REAL API CALL — hits POST /api/admin/auth/login on your backend.
+      // UNCHANGED from before: same request, same response shape.
       const response = await adminLogin(email, password);
       // response = { token: "eyJ...", admin: { _id, name, email, role } }
+      const actualRole = response.admin.role === "distributor_admin" ? "distributor_admin" : "field_sales";
+
+      // NEW (additive) — if the tab picked doesn't match this account's
+      // real role, don't log them into the wrong dashboard.
+      if (actualRole !== loginType) {
+        setError(
+          actualRole === "distributor_admin"
+            ? 'This account is a Distributors login. Switch to the "Distributors" tab above and sign in again.'
+            : 'This account is a Field Sales login. Switch to the "Field Sales" tab above and sign in again.'
+        );
+        setLoading(false);
+        return;
+      }
+
       login(response.token, response.admin);
-      navigate("/dashboard");
+      navigate(actualRole === "distributor_admin" ? "/distributor-admin/dashboard" : "/dashboard");
     } catch (err) {
       setError(err?.response?.data?.message || "Invalid email or password.");
     } finally {
@@ -133,8 +157,35 @@ export default function AdminLoginPage() {
             className="relative text-center text-white/80 text-sm mb-8 field-in"
             style={{ animationDelay: "0.65s" }}
           >
-            Sign in to manage your field team
+            {loginType === "distributor_admin" ? "Sign in to manage your distributors" : "Sign in to manage your field team"}
           </p>
+
+          {/* NEW (additive) — Feature: two Admin Dashboard login types.
+              Purely a UI grouping toggle; see handleLogin for how it's
+              used (no request/endpoint change). */}
+          <div
+            className="relative flex bg-white/10 border border-white/30 rounded-full p-1 mb-6 field-in"
+            style={{ animationDelay: "0.7s" }}
+          >
+            <button
+              type="button"
+              onClick={() => { setLoginType("field_sales"); setError(""); }}
+              className={`flex-1 py-2 rounded-full text-xs font-semibold transition ${
+                loginType === "field_sales" ? "bg-white text-gray-800 shadow" : "text-white/70"
+              }`}
+            >
+              Field Sales
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLoginType("distributor_admin"); setError(""); }}
+              className={`flex-1 py-2 rounded-full text-xs font-semibold transition ${
+                loginType === "distributor_admin" ? "bg-white text-gray-800 shadow" : "text-white/70"
+              }`}
+            >
+              Distributors
+            </button>
+          </div>
 
           {error && (
             <div className="relative bg-red-500/20 border border-red-300/40 text-red-50 text-sm rounded-2xl px-4 py-3 mb-5 backdrop-blur-sm text-center">
